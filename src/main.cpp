@@ -35,79 +35,23 @@ class $modify(MyPlayLayer, PlayLayer) {
     if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
     if (!settings.enabled) return true;
     
-    pathfinder.inputs.clear();
-    pathfinder.inputs.push_back({ 0, false, true });
-
-    pathfinder.pathfinding = true;
+    
 
     return true;
   }
 
   void postUpdate(float dt) {
     PlayLayer::postUpdate(dt);
-
     if (!settings.enabled) return;
-    if (pathfinder.pathfinding) this->pathfind();
   }
 
   void levelComplete() {
     PlayLayer::levelComplete();
-    if (settings.enabled) pathfinder.pathfinding = false;
   }
 
   void onQuit() {
     PlayLayer::onQuit();
     pathfinder.pathfinding = false;
-  }
-
-  void pathfind() {
-    auto& pf = pathfinder;
-    if (!pf.pathfinding) return;
-
-    pf.frame++;
-
-    if (pf.index < pf.inputs.size()) {
-      auto& input = pf.inputs[pf.index];
-
-      if (input.frame == pf.frame) {
-        m_player1->pushButton(PlayerButton::Jump);
-        if (input.pressed) m_player1->releaseButton(PlayerButton::Jump);
-
-        pf.index++;
-      }
-    }
-
-    if (m_player1 && m_player1->m_isDead) {
-      if (pf.inputs.empty()) {
-        pf.pathfinding = false;
-        return;
-      }
-
-      auto& last = pf.inputs.back();
-
-      if (!last.held) {
-        last.held = true;
-        last.pressed = !last.pressed;
-
-        resetPath();
-      } else {
-        pf.inputs.pop_back();
-
-        if (pf.inputs.empty()) {
-          pf.pathfinding = false;
-          return;
-        }
-
-        resetPath();
-      }
-
-      return;
-    }
-  }
-
-  void resetPath() {
-    pathfinder.index = 0;
-    pathfinder.frame = 0;
   }
 };
 
