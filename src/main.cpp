@@ -9,85 +9,105 @@
 
 using namespace geode::prelude;
 
-bool pathfinding = false;
+struct Input {
+  int frame = 0;
+
+  bool held = false;
+  bool pressed = false;
+};
+
+struct Pathfinder {
+  std::vector<Input> inputs;
+  bool pathfinding = false;
+
+  int index = 0;
+  int frame = 0;
+};
+static Pathfinder pathfinder;
 
 struct Settings {
   bool enabled = true;
 };
 static Settings settings;
 
-class $modify(MyGJGameLevel, GJGameLevel) {
-  void savePercentage(int percentage, bool isPractice, int p2, int p3, bool p4) {
-    if (settings.enabled) return; 
-    GJGameLevel::savePercentage(percentage, isPractice, p2, p3, p4);
-  }
-};
-
 class $modify(MyPlayLayer, PlayLayer) {
-  struct Fields {
-    int m_frame = 0;
-    PlayerObject* m_state;
-  };
-
   bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
     if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
     if (!settings.enabled) return true;
     
-    pathfinding = true;
-    m_fields->m_state = m_player1;
+    pathfinder.inputs.clear();
+    pathfinder.inputs.push_back({ 0, false, true });
+
+    pathfinder.pathfinding = true;
 
     return true;
   }
 
   void postUpdate(float dt) {
     PlayLayer::postUpdate(dt);
-    if (!settings.enabled) return;
 
-    this->pathfind(m_player1);
+    if (!settings.enabled) return;
+    if (pathfinder.pathfinding) this->pathfind();
   }
 
   void levelComplete() {
-    if (settings.enabled) {
-      this->onQuit(); 
-      return; 
-    }
-
     PlayLayer::levelComplete();
+    if (settings.enabled) pathfinder.pathfinding = false;
   }
 
   void onQuit() {
     PlayLayer::onQuit();
-    pathfinding = false;
+    pathfinder.pathfinding = false;
   }
 
-  void saveState(PlayerObject* player) {
-    m_fields->m_state = player;
-  }
+  void pathfind() {
+    auto& pf = pathfinder;
+    if (!pf.pathfinding) return;
 
-  void loadState(PlayerObject* player) {
-    player = m_fields->m_state;
-    player->setPosition(m_fields->m_state->getRealPosition());
-  }
+    pf.frame++;
 
-  void pathfind(PlayerObject* player, bool hold = false) {
-    // int frame = 0;
-    // int maxFrames = 50000;
+    if (pf.index < pf.inputs.size()) {
+      auto& input = pf.inputs[pf.index];
 
-    // auto currentPos = player->getPosition();
-    // auto lastPos = player->getLastPosition();
+      if (input.frame == pf.frame) {
+        m_player1->pushButton(PlayerButton::Jump);
+        if (input.pressed) m_player1->releaseButton(PlayerButton::Jump);
 
-    if (hold) player->pushButton(PlayerButton::Jump);
-    else player->releaseButton(PlayerButton::Jump);
-
-    if (player->m_isDead) {
-      hold = !hold;
-      loadState(m_fields->m_state);
-
-      log::info("Player Died!");
-      return;
-    } else {
-      saveState(player);
+        pf.index++;
+      }
     }
+
+    if (m_player1 && m_player1->m_isDead) {
+      if (pf.inputs.empty()) {
+        pf.pathfinding = false;
+        return;
+      }
+
+      auto& last = pf.inputs.back();
+
+      if (!last.held) {
+        last.held = true;
+        last.pressed = !last.pressed;
+
+        resetPath();
+      } else {
+        pf.inputs.pop_back();
+
+        if (pf.inputs.empty()) {
+          pf.pathfinding = false;
+          return;
+        }
+
+        resetPath();
+      }
+
+      return;
+    }
+  }
+
+  void resetPath() {
+    pathfinder.index = 0;
+    pathfinder.frame = 0;
   }
 };
 
