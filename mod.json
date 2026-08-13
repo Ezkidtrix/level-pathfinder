@@ -10,7 +10,7 @@
 	"name": "Level Pathfinder",
 	"version": "v1.0.0",
 	"developer": "Ezkidtrix",
-	"description": "A mod that can pathfind and solve levels",
+	"description": "A mod that can pathfind and solve any level",
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
 	},
