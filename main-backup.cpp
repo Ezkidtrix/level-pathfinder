@@ -10,6 +10,7 @@
 
 #include <Geode/binding/PlayerObject.hpp>
 #include <Geode/modify/PlayerObject.hpp>
+#include <arc/time/Interval.hpp>
 
 using namespace geode::prelude;
 
@@ -18,10 +19,18 @@ struct Settings {
 };
 static Settings settings;
 
+struct Input {
+  int frame;
+  bool pressed;
+};
+
 struct Pathfinder {
   PlayerObject* ghost;
+
+  int ghostFrame = 0;
+  int playerFrame = 0;
   
-  int index = 0;
+  bool jump = false;
   bool isDead = false;
 
   std::vector<float> inputs;
@@ -29,11 +38,14 @@ struct Pathfinder {
 };
 static Pathfinder pathfinder;
 
-class $modify(PlayLayer) {
+class $modify(MyPlayLayer, PlayLayer) {
   bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
     if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-    pathfinder.index = 0;
+    pathfinder.ghostFrame = 0;
+    pathfinder.playerFrame = 0;
+
+    pathfinder.jump = false;
     pathfinder.isDead = false;
     
     pathfinder.inputs.clear();
@@ -45,50 +57,54 @@ class $modify(PlayLayer) {
     return true;
   }
 
-  void simulate() {
+  bool simulate() {
     auto* ghost = pathfinder.ghost;
-    if (!ghost || !m_player1 || m_player1->m_isDead) return;
+    if (!ghost || !m_player1 || m_player1->m_isDead) return false;
 
-    ghost->update(0.5f);
-    checkCollisions(ghost, 0.5f, false);
+    for (int i = 0; i < 1; i++) {
+      ghost->m_collisionLogTop->removeAllObjects();
+      ghost->m_collisionLogBottom->removeAllObjects();
 
-    ghost->updateRotation(0.5f);
-    ghost->updatePlayerScale();
+      ghost->m_collisionLogLeft->removeAllObjects();
+      ghost->m_collisionLogRight->removeAllObjects();
 
-    pathfinder.history.push_back(ghost->getPosition());
+      ghost->update(0.5f);
+      checkCollisions(ghost, 0.5f, false);
+
+      ghost->updateRotation(0.5f);
+      ghost->updatePlayerScale();
+
+      if (pathfinder.isDead) break;
+    }
+
+    return pathfinder.isDead;
   }
 
   void pathfind() {
     auto* ghost = pathfinder.ghost;
-    pathfinder.isDead = false;
+    bool result = simulate();
 
-    simulate();
+    if (!result) {
+      ghost->releaseButton(PlayerButton::Jump);
 
-    if (pathfinder.isDead) {
-      for (int i = 0; i < 30; i++) {
-        if (pathfinder.history.size() == 0) break;
+      CCPoint pos = ghost->getPosition();
+      pathfinder.history.push_back(pos);
 
-        auto pos = pathfinder.history[pathfinder.history.size() - 1];
-        pathfinder.history.pop_back();
-
-        ghost->setPosition(pos);
-        ghost->pushButton(PlayerButton::Jump);
-
-        pathfinder.isDead = false;
-
-        ghost->update(0.5f);
-        checkCollisions(ghost, 0.5f, false);
-
-        ghost->updateRotation(0.5f);
-        ghost->updatePlayerScale();
-
-        if (!pathfinder.isDead) {
-          ghost->releaseButton(PlayerButton::Jump);
-          pathfinder.inputs.push_back(pos.x);
-
-          break;
-        }
+      if (pathfinder.jump) {
+        pathfinder.jump = false;
+        pathfinder.inputs.push_back(ghost->getPositionX());
       }
+    } else {
+      pathfinder.isDead = false;
+
+      int index = pathfinder.history.size();
+      if (index == 0) return;
+
+      ghost->setPosition(pathfinder.history.at(index - 1));
+      ghost->pushButton(PlayerButton::Jump);
+
+      pathfinder.history.pop_back();
+      pathfinder.jump = true;
     }
   }
 
@@ -106,14 +122,12 @@ class $modify(PlayLayer) {
     PlayLayer::postUpdate(dt);
 
     if (settings.enabled) {
-      pathfind();
       m_player1->releaseButton(PlayerButton::Jump);
+      pathfind();
 
       if (pathfinder.inputs.size() > 0) {
-        log::info("PlayerX, InputX: {} {}", m_player1->getPositionX(), pathfinder.inputs[pathfinder.index]);
-
-        if (m_player1->getPositionX() >= pathfinder.inputs[pathfinder.index] - 10) {
-          pathfinder.index++;
+        if (m_player1->getPositionX() >= pathfinder.inputs[0]) {
+          pathfinder.inputs.erase(pathfinder.inputs.begin());
           m_player1->pushButton(PlayerButton::Jump);
         }
       }
@@ -126,8 +140,8 @@ class $modify(PlayLayer) {
       return;
     }
 
-    pathfinder.index = 0;
     PlayLayer::destroyPlayer(player, object);
+    pathfinder.ghost->copyAttributes(m_player1);
   }
 };
 
